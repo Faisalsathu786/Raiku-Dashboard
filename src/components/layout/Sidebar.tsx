@@ -19,11 +19,15 @@ export function Sidebar() {
   return (
     <aside className="fixed left-0 top-0 z-40 h-screen w-64 border-r border-border bg-surface">
       <div className="flex h-16 items-center gap-3 px-6 border-b border-border">
-        <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-gradient-to-br from-primary to-accent">
-          <span className="text-sm font-bold text-white">R</span>
+        <div className="flex h-9 w-9 items-center justify-center rounded-lg overflow-hidden bg-black flex-shrink-0">
+          <img
+            src="/raiku-logo.jpg"
+            alt="Raiku"
+            className="h-full w-full object-cover"
+          />
         </div>
         <div>
-          <h1 className="text-lg font-semibold text-text">rkuSOL</h1>
+          <h1 className="text-lg font-semibold text-text">Raiku</h1>
           <p className="text-xs text-text-muted">Points Dashboard</p>
         </div>
       </div>
