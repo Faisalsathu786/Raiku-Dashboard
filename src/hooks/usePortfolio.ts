@@ -1,20 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-
-interface PortfolioData {
-  walletAddress: string;
-  rkusolBalance: number;
-  solValue: number;
-  usdValue: number;
-  daysHeld: number;
-  estimatedPoints: number;
-  estimatedRewards: number;
-  apy: number;
-  exchangeRate: number;
-  firstStakedAt: string | null;
-  tokenAccounts: Array<{ address: string; amount: number }>;
-}
+import type { PortfolioData } from '@/types';
 
 export function usePortfolio(walletAddress: string | null) {
   const [data, setData] = useState<PortfolioData | null>(null);

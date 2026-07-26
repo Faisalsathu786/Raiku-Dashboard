@@ -43,3 +43,38 @@ export interface LeaderboardFilters {
   timeRange: 'all' | 'month' | 'week';
   limit: number;
 }
+
+export interface PortfolioActivity {
+  signature: string;
+  timestamp: string;
+  type: 'stake' | 'unstake';
+  amount: number;
+  balanceBefore: number;
+  balanceAfter: number;
+  daysSinceLastEvent: number;
+  pointsEarned: number;
+}
+
+export interface PortfolioPeriod {
+  from: string;
+  to: string | null;
+  balance: number;
+  days: number;
+  points: number;
+}
+
+export interface PortfolioData {
+  walletAddress: string;
+  currentBalance: number;
+  solValue: number;
+  usdValue: number;
+  totalPoints: number;
+  estimatedRewards: number;
+  apy: number;
+  exchangeRate: number;
+  daysSinceFirstStake: number;
+  firstStakedAt: string | null;
+  activity: PortfolioActivity[];
+  periods: PortfolioPeriod[];
+  tokenAccounts: Array<{ address: string; amount: number }>;
+}

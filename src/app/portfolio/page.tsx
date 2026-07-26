@@ -119,7 +119,7 @@ function PortfolioContent() {
         </div>
       )}
 
-      {data && data.rkusolBalance <= 0 && (
+      {data && data.currentBalance <= 0 && (
         <div className="rounded-xl border border-border bg-surface p-12">
           <div className="flex flex-col items-center gap-3">
             <p className="text-sm text-text-muted">
@@ -134,7 +134,7 @@ function PortfolioContent() {
         </div>
       )}
 
-      {data && data.rkusolBalance > 0 && <PortfolioCard data={data} />}
+      {data && data.currentBalance > 0 && <PortfolioCard data={data} />}
     </div>
   );
 }
