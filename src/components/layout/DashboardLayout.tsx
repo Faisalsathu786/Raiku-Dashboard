@@ -58,7 +58,7 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
           mobileOpen ? 'translate-x-0' : '-translate-x-full'
         )}
       >
-        <Sidebar collapsed={false} onToggle={() => {}} mobile={true} onMobileClose={() => setMobileOpen(false)} />
+        <Sidebar collapsed={false} onToggle={() => {}} mobile={true} />
       </div>
 
       <div

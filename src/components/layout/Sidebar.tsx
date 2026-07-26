@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { X, LayoutDashboard, Trophy, BarChart3, Calculator, Wallet2, ChevronLeft } from 'lucide-react';
+import { LayoutDashboard, Trophy, BarChart3, Calculator, Wallet2, ChevronLeft } from 'lucide-react';
 import clsx from 'clsx';
 
 const NAV_ITEMS = [
@@ -104,14 +104,7 @@ export function Sidebar({ collapsed, onToggle, mobile, onMobileClose }: SidebarP
         mobile ? 'relative' : 'fixed left-0 top-0'
       )}
     >
-      {mobile && onMobileClose && (
-        <button
-          onClick={onMobileClose}
-          className="absolute -right-10 top-4 z-50 flex h-8 w-8 items-center justify-center rounded-full bg-surface border border-border text-text-muted hover:text-text"
-        >
-          <X size={16} />
-        </button>
-      )}
+
       {sidebarContent}
 
       {!mobile && (
