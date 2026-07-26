@@ -1,20 +1,19 @@
 'use client';
 
-import { useState } from 'react';
 import { Menu } from 'lucide-react';
 
 interface HeaderProps {
   title: string;
+  onMenuClick: () => void;
+  mobileMenuOpen: boolean;
 }
 
-export function Header({ title }: HeaderProps) {
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-
+export function Header({ title, onMenuClick }: HeaderProps) {
   return (
     <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b border-border bg-background/80 backdrop-blur-sm px-4 lg:px-8">
       <div className="flex items-center gap-4">
         <button
-          onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+          onClick={onMenuClick}
           className="lg:hidden p-2 rounded-lg text-text-muted hover:bg-surface-light"
           aria-label="Toggle menu"
         >
