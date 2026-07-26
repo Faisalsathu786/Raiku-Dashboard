@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect, useState } from 'react';
 import { BarChart } from '@/components/charts/BarChart';
 import { formatUsd } from '@/utils/format';
 
@@ -21,30 +22,35 @@ export function ComparisonChart({
   duration,
   solPrice,
 }: ComparisonChartProps) {
+  const [rkusolApy, setRkusolApy] = useState(4.25);
+
+  useEffect(() => {
+    const fetchApy = async () => {
+      try {
+        const res = await fetch('/api/staking');
+        const data = await res.json();
+        if (data.apy) setRkusolApy(data.apy);
+      } catch {
+        // keep default
+      }
+    };
+    fetchApy();
+    const interval = setInterval(fetchApy, 60_000);
+    return () => clearInterval(interval);
+  }, []);
+
   const strategies: StrategyData[] = [
     {
-      label: 'Native SOL',
+      label: 'Native SOL Staking',
       value: amount * (1 + (0.052 * duration) / 365) * solPrice,
       apy: 5.2,
       color: '#94a3b8',
     },
     {
-      label: 'rkuSOL',
-      value: amount * (1 + (0.075 * duration) / 365) * solPrice,
-      apy: 7.5,
+      label: 'rkuSOL Staking',
+      value: amount * (1 + (rkusolApy / 100 * duration) / 365) * solPrice,
+      apy: rkusolApy,
       color: '#6366f1',
-    },
-    {
-      label: 'rkuSOL + Kamino',
-      value: amount * (1 + (0.098 * duration) / 365) * solPrice,
-      apy: 9.8,
-      color: '#8b5cf6',
-    },
-    {
-      label: 'rkuSOL + Meteora',
-      value: amount * (1 + (0.123 * duration) / 365) * solPrice,
-      apy: 12.3,
-      color: '#a78bfa',
     },
   ];
 
@@ -71,7 +77,7 @@ export function ComparisonChart({
         />
       </div>
 
-      <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
+      <div className="mt-4 grid grid-cols-2 gap-3">
         {strategies.map((s) => (
           <div
             key={s.label}

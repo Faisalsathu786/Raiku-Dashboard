@@ -2,11 +2,12 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { LayoutDashboard, Trophy, BarChart3, Calculator } from 'lucide-react';
+import { LayoutDashboard, Trophy, BarChart3, Calculator, Wallet2 } from 'lucide-react';
 import clsx from 'clsx';
 
 const NAV_ITEMS = [
   { label: 'Dashboard', href: '/', icon: LayoutDashboard },
+  { label: 'Portfolio', href: '/portfolio', icon: Wallet2 },
   { label: 'Leaderboard', href: '/leaderboard', icon: Trophy },
   { label: 'Analytics', href: '/analytics', icon: BarChart3 },
   { label: 'Calculator', href: '/calculator', icon: Calculator },

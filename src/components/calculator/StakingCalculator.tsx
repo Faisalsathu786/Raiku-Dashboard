@@ -11,7 +11,6 @@ export function StakingCalculator() {
     result,
     updateAmount,
     updateDuration,
-    updateApy,
   } = usePointsSimulator();
 
   return (
@@ -70,22 +69,13 @@ export function StakingCalculator() {
               </div>
             </div>
 
-            <div>
-              <label className="text-xs font-medium text-text-muted">
-                APY (%)
-              </label>
-              <div className="mt-1.5">
-                <select
-                  value={input.apy}
-                  onChange={(e) => updateApy(Number(e.target.value))}
-                  className="w-full rounded-lg border border-border bg-background px-3 py-1.5 text-sm text-text focus:outline-none focus:ring-2 focus:ring-primary/50"
-                >
-                  <option value={7.5}>rkuSOL Staking (7.5%)</option>
-                  <option value={5.2}>Native SOL Staking (5.2%)</option>
-                  <option value={9.8}>rkuSOL + Kamino (9.8%)</option>
-                  <option value={12.3}>rkuSOL + Meteora (12.3%)</option>
-                </select>
-              </div>
+            <div className="rounded-lg bg-surface-light p-3">
+              <p className="text-xs text-text-muted">
+                Current APY: <span className="text-text font-medium">{input.apy}%</span>
+              </p>
+              <p className="text-xs text-text-muted mt-0.5">
+                Rate sourced live from Sanctum
+              </p>
             </div>
           </div>
         </div>
@@ -108,6 +98,9 @@ export function StakingCalculator() {
               <p className="mt-1 text-2xl font-bold text-accent">
                 {formatPoints(result.estimatedPoints)}
               </p>
+              <p className="mt-1 text-xs text-text-muted">
+                {formatNumber(input.amount)} SOL x {input.duration} days = {formatPoints(result.estimatedPoints)} pts
+              </p>
             </div>
 
             <div className="grid grid-cols-2 gap-3">
@@ -126,7 +119,9 @@ export function StakingCalculator() {
             </div>
 
             <div className="rounded-lg bg-surface-light p-3">
-              <p className="text-xs text-text-muted">USD Value (at ~${result.solPrice}/SOL)</p>
+              <p className="text-xs text-text-muted">
+                USD Value (at ${formatNumber(result.solPrice)}/SOL)
+              </p>
               <p className="mt-1 text-lg font-semibold text-success">
                 {formatUsd(result.usdValue)}
               </p>

@@ -1,8 +1,9 @@
 'use client';
 
+import { useRouter } from 'next/navigation';
 import { LeaderboardEntry } from '@/types';
 import { shortenAddress, formatNumber, formatPoints } from '@/utils/format';
-import { Trophy, Medal } from 'lucide-react';
+import { Trophy, Medal, ExternalLink } from 'lucide-react';
 
 interface LeaderboardTableProps {
   entries: LeaderboardEntry[];
@@ -24,6 +25,8 @@ function RankBadge({ rank }: { rank: number }) {
 }
 
 export function LeaderboardTable({ entries, loading }: LeaderboardTableProps) {
+  const router = useRouter();
+
   if (loading) {
     return (
       <div className="rounded-xl border border-border bg-surface p-6">
@@ -58,7 +61,9 @@ export function LeaderboardTable({ entries, loading }: LeaderboardTableProps) {
               <th className="py-3 pl-5 font-medium w-12">#</th>
               <th className="py-3 font-medium">Wallet</th>
               <th className="py-3 font-medium text-right">SOL Staked</th>
-              <th className="py-3 pr-5 font-medium text-right">Est. Points</th>
+              <th className="py-3 font-medium text-right">Est. Days</th>
+              <th className="py-3 font-medium text-right">Est. Points</th>
+              <th className="py-3 pr-5 font-medium text-right">Details</th>
             </tr>
           </thead>
           <tbody>
@@ -76,8 +81,26 @@ export function LeaderboardTable({ entries, loading }: LeaderboardTableProps) {
                 <td className="py-3 text-right text-text tabular-nums">
                   {formatNumber(entry.solStaked)} SOL
                 </td>
-                <td className="py-3 pr-5 text-right text-accent-light tabular-nums font-medium">
+                <td className="py-3 text-right text-text tabular-nums">
+                  {entry.daysHeld != null
+                    ? `${formatNumber(entry.daysHeld)}d`
+                    : '-'}
+                </td>
+                <td className="py-3 text-right text-accent-light tabular-nums font-medium">
                   {formatPoints(entry.estimatedPoints)}
+                </td>
+                <td className="py-3 pr-5 text-right">
+                  <button
+                    onClick={() =>
+                      router.push(
+                        `/portfolio?wallet=${entry.walletAddress}`
+                      )
+                    }
+                    className="inline-flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-medium text-primary hover:bg-primary/10 transition-colors"
+                  >
+                    <ExternalLink size={12} />
+                    View
+                  </button>
                 </td>
               </tr>
             ))}

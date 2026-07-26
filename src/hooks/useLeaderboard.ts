@@ -6,6 +6,7 @@ import type { LeaderboardEntry, LeaderboardFilters } from '@/types';
 interface LeaderboardResponse {
   entries: LeaderboardEntry[];
   total: number;
+  daysSinceLaunch?: number;
 }
 
 export function useLeaderboard(initialFilters?: Partial<LeaderboardFilters>) {

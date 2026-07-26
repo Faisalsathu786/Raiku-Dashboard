@@ -17,37 +17,40 @@ interface SimulatorResult {
   apy: number;
 }
 
-const CUSTOM_APY = 7.5;
-
 export function usePointsSimulator() {
-  const [solPrice, setSolPrice] = useState(180);
+  const [solPrice, setSolPrice] = useState(75.28);
+  const [apy, setApy] = useState(4.25);
   const [input, setInput] = useState<SimulatorInput>({
     amount: 10,
     duration: 30,
-    apy: CUSTOM_APY,
+    apy: 4.25,
   });
 
   useEffect(() => {
-    const fetchPrice = async () => {
+    const fetchData = async () => {
       try {
         const res = await fetch('/api/staking');
         const data = await res.json();
+        if (data.apy) {
+          setApy(data.apy);
+          setInput((prev) => ({ ...prev, apy: data.apy }));
+        }
         if (data.solPriceUsd) {
           setSolPrice(data.solPriceUsd);
         }
       } catch {
-        // keep default
+        // keep defaults
       }
     };
-    fetchPrice();
-    const interval = setInterval(fetchPrice, 60_000);
+    fetchData();
+    const interval = setInterval(fetchData, 60_000);
     return () => clearInterval(interval);
   }, []);
 
   const result = useMemo<SimulatorResult>(() => {
     const pointsPerDayPerSol = 1;
     const estimatedPoints = input.amount * input.duration * pointsPerDayPerSol;
-    const annualRate = input.apy / 100;
+    const annualRate = apy / 100;
     const solRewards = input.amount * annualRate * (input.duration / 365);
     const totalReturn = input.amount + solRewards;
     const usdValue = totalReturn * solPrice;
@@ -58,22 +61,19 @@ export function usePointsSimulator() {
       usdValue,
       solPrice,
       totalReturn,
-      apy: input.apy,
+      apy,
     };
-  }, [input, solPrice]);
+  }, [input, apy, solPrice]);
 
   const updateAmount = (amount: number) =>
     setInput((prev) => ({ ...prev, amount: Math.max(0, amount) }));
   const updateDuration = (duration: number) =>
     setInput((prev) => ({ ...prev, duration: Math.max(1, duration) }));
-  const updateApy = (apy: number) =>
-    setInput((prev) => ({ ...prev, apy }));
 
   return {
     input,
     result,
     updateAmount,
     updateDuration,
-    updateApy,
   };
 }

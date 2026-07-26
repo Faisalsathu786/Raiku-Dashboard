@@ -20,6 +20,7 @@ export interface LeaderboardEntry {
   solStaked: number;
   estimatedPoints: number;
   change24h?: number;
+  daysHeld?: number | null;
 }
 
 export interface StakingHistoryPoint {
