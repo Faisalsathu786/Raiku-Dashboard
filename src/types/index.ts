@@ -19,7 +19,7 @@ export interface LeaderboardEntry {
   walletAddress: string;
   solStaked: number;
   estimatedPoints: number;
-  change24h: number;
+  change24h?: number;
 }
 
 export interface StakingHistoryPoint {

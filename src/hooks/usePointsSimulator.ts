@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 
 interface SimulatorInput {
   amount: number;
@@ -17,15 +17,34 @@ interface SimulatorResult {
   apy: number;
 }
 
+const CUSTOM_APY = 7.5;
+
 export function usePointsSimulator() {
+  const [solPrice, setSolPrice] = useState(180);
   const [input, setInput] = useState<SimulatorInput>({
     amount: 10,
     duration: 30,
-    apy: 7.5,
+    apy: CUSTOM_APY,
   });
 
+  useEffect(() => {
+    const fetchPrice = async () => {
+      try {
+        const res = await fetch('/api/staking');
+        const data = await res.json();
+        if (data.solPriceUsd) {
+          setSolPrice(data.solPriceUsd);
+        }
+      } catch {
+        // keep default
+      }
+    };
+    fetchPrice();
+    const interval = setInterval(fetchPrice, 60_000);
+    return () => clearInterval(interval);
+  }, []);
+
   const result = useMemo<SimulatorResult>(() => {
-    const solPrice = 180;
     const pointsPerDayPerSol = 1;
     const estimatedPoints = input.amount * input.duration * pointsPerDayPerSol;
     const annualRate = input.apy / 100;
@@ -41,7 +60,7 @@ export function usePointsSimulator() {
       totalReturn,
       apy: input.apy,
     };
-  }, [input]);
+  }, [input, solPrice]);
 
   const updateAmount = (amount: number) =>
     setInput((prev) => ({ ...prev, amount: Math.max(0, amount) }));

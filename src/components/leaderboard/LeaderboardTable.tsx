@@ -39,6 +39,16 @@ export function LeaderboardTable({ entries, loading }: LeaderboardTableProps) {
     );
   }
 
+  if (entries.length === 0) {
+    return (
+      <div className="rounded-xl border border-border bg-surface p-6">
+        <div className="flex h-40 items-center justify-center text-sm text-text-muted">
+          No holder data available
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="rounded-xl border border-border bg-surface">
       <div className="overflow-x-auto">
@@ -48,8 +58,7 @@ export function LeaderboardTable({ entries, loading }: LeaderboardTableProps) {
               <th className="py-3 pl-5 font-medium w-12">#</th>
               <th className="py-3 font-medium">Wallet</th>
               <th className="py-3 font-medium text-right">SOL Staked</th>
-              <th className="py-3 font-medium text-right">Points</th>
-              <th className="py-3 pr-5 font-medium text-right">24h Change</th>
+              <th className="py-3 pr-5 font-medium text-right">Est. Points</th>
             </tr>
           </thead>
           <tbody>
@@ -67,18 +76,8 @@ export function LeaderboardTable({ entries, loading }: LeaderboardTableProps) {
                 <td className="py-3 text-right text-text tabular-nums">
                   {formatNumber(entry.solStaked)} SOL
                 </td>
-                <td className="py-3 text-right text-text tabular-nums">
+                <td className="py-3 pr-5 text-right text-accent-light tabular-nums font-medium">
                   {formatPoints(entry.estimatedPoints)}
-                </td>
-                <td className="py-3 pr-5 text-right tabular-nums">
-                  <span
-                    className={
-                      entry.change24h >= 0 ? 'text-success' : 'text-danger'
-                    }
-                  >
-                    {entry.change24h >= 0 ? '+' : ''}
-                    {entry.change24h.toFixed(1)}%
-                  </span>
                 </td>
               </tr>
             ))}

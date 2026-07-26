@@ -8,7 +8,7 @@ import { useStakingData } from '@/hooks/useStakingData';
 import { StatsGrid } from '@/components/dashboard/StatsGrid';
 
 export default function LeaderboardPage() {
-  const { entries, filters, updateFilters } = useLeaderboard();
+  const { entries, filters, updateFilters, loading } = useLeaderboard();
   const { stats, loading: statsLoading } = useStakingData();
 
   return (
@@ -19,10 +19,12 @@ export default function LeaderboardPage() {
         <div className="flex items-center justify-between">
           <div>
             <h3 className="text-base font-semibold text-text">
-              Top Stakers
+              Top Holders
             </h3>
             <p className="text-xs text-text-muted mt-0.5">
-              Ranked by {filters.sortBy === 'sol' ? 'SOL staked' : 'points earned'}
+              {loading
+                ? 'Loading...'
+                : `${entries.length} holders ranked by ${filters.sortBy === 'sol' ? 'rkuSOL staked' : 'estimated points'}`}
             </p>
           </div>
           <LeaderboardFiltersPanel
@@ -31,7 +33,7 @@ export default function LeaderboardPage() {
           />
         </div>
 
-        <LeaderboardTable entries={entries} />
+        <LeaderboardTable entries={entries} loading={loading} />
       </div>
     </DashboardLayout>
   );
