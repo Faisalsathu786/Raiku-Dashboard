@@ -10,34 +10,46 @@ async function getDaysSinceLaunch(): Promise<number> {
   if (cachedDaysSinceLaunch !== null) return cachedDaysSinceLaunch;
 
   try {
-    const sigs = (await fetchRpc('getSignaturesForAddress', [
-      RKUSOL_MINT,
-      { limit: 1000 },
-    ])) as Array<{ signature: string }> | undefined;
+    const tokenAccounts = await getProgramAccounts();
+    if (tokenAccounts.length > 0) {
+      const firstAccountPubkey = tokenAccounts[0].pubkey;
+      const sigs = (await fetchRpc('getSignaturesForAddress', [
+        firstAccountPubkey,
+        { limit: 1000 },
+      ])) as Array<{ signature: string }> | undefined;
 
-    if (!sigs || sigs.length === 0) {
-      cachedDaysSinceLaunch = 30;
-      return cachedDaysSinceLaunch;
-    }
+      if (sigs && sigs.length > 0) {
+        const oldestSig = sigs[sigs.length - 1].signature;
+        const tx = (await fetchRpc('getTransaction', [
+          oldestSig,
+          { encoding: 'jsonParsed', maxSupportedTransactionVersion: 0 },
+        ])) as { blockTime?: number } | undefined;
 
-    const lastSig = sigs[sigs.length - 1];
-    const tx = (await fetchRpc('getTransaction', [
-      lastSig.signature,
-      { encoding: 'jsonParsed', maxSupportedTransactionVersion: 0 },
-    ])) as { blockTime?: number } | undefined;
-
-    if (tx?.blockTime) {
-      cachedDaysSinceLaunch = Math.floor(
-        (Date.now() - tx.blockTime * 1000) / 86_400_000
-      );
-    } else {
-      cachedDaysSinceLaunch = 30;
+        if (tx?.blockTime) {
+          cachedDaysSinceLaunch = Math.floor(
+            (Date.now() - tx.blockTime * 1000) / 86_400_000
+          );
+          return cachedDaysSinceLaunch ?? 26;
+        }
+      }
     }
   } catch {
-    cachedDaysSinceLaunch = 30;
+    // fall through to default
   }
 
-  return cachedDaysSinceLaunch ?? 30;
+  cachedDaysSinceLaunch = 26;
+  return cachedDaysSinceLaunch;
+}
+
+async function getProgramAccounts() {
+  const res = await fetchRpc('getProgramAccounts', [
+    'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA',
+    {
+      encoding: 'jsonParsed',
+      filters: [{ memcmp: { offset: 0, bytes: RKUSOL_MINT } }],
+    },
+  ]);
+  return (res as any[]) ?? [];
 }
 
 async function fetchRpc(method: string, params: unknown[]): Promise<unknown> {
@@ -65,12 +77,27 @@ export async function GET(request: NextRequest) {
   const sortBy = searchParams.get('sortBy') || 'sol';
 
   try {
-    const [daysSinceLaunch, holdersData] = await Promise.all([
+    const [daysSinceLaunch, accounts] = await Promise.all([
       getDaysSinceLaunch(),
-      fetchTopHolders(limit),
+      getProgramAccounts(),
     ]);
 
-    const entries: HolderEntry[] = holdersData.map((h, i) => {
+    const holders: Array<{ address: string; amount: number }> = [];
+    for (const acc of accounts) {
+      const parsed = acc?.account?.data?.parsed;
+      const info = parsed?.info;
+      if (!info) continue;
+      const amount = info?.tokenAmount?.uiAmount ?? 0;
+      const owner = info?.owner ?? '';
+      if (owner && amount > 0) {
+        holders.push({ address: owner, amount });
+      }
+    }
+
+    holders.sort((a, b) => b.amount - a.amount);
+    const topHolders = holders.slice(0, limit);
+
+    const entries: HolderEntry[] = topHolders.map((h, i) => {
       const points = Math.floor(h.amount * daysSinceLaunch * POINTS_PER_SOL_PER_DAY);
       return {
         rank: i + 1,
@@ -101,52 +128,4 @@ export async function GET(request: NextRequest) {
       { status: 200 }
     );
   }
-}
-
-async function fetchTopHolders(
-  limit: number
-): Promise<Array<{ address: string; amount: number }>> {
-  const res = await fetch(SOLANA_RPC, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      jsonrpc: '2.0',
-      id: 1,
-      method: 'getProgramAccounts',
-      params: [
-        'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA',
-        {
-          encoding: 'jsonParsed',
-          filters: [
-            {
-              memcmp: {
-                offset: 0,
-                bytes: RKUSOL_MINT,
-              },
-            },
-          ],
-        },
-      ],
-    }),
-    next: { revalidate: 60 },
-  });
-
-  const data = await res.json();
-  const accounts = data?.result ?? [];
-
-  const holders: Array<{ address: string; amount: number }> = [];
-
-  for (const acc of accounts) {
-    const parsed = acc?.account?.data?.parsed;
-    const info = parsed?.info;
-    if (!info) continue;
-    const amount = info?.tokenAmount?.uiAmount ?? 0;
-    const owner = info?.owner ?? '';
-    if (owner && amount > 0) {
-      holders.push({ address: owner, amount });
-    }
-  }
-
-  holders.sort((a, b) => b.amount - a.amount);
-  return holders.slice(0, limit);
 }
