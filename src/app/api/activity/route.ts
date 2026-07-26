@@ -74,8 +74,11 @@ export async function GET() {
               const diff = postAmt - preAmt;
               if (Math.abs(diff) < 0.0001) continue;
 
-              const accountKey: string =
-                tx.transaction?.message?.accountKeys?.[postBal.accountIndex] ?? '';
+              const accountKeyRaw =
+                tx.transaction?.message?.accountKeys?.[postBal.accountIndex];
+              const accountKey: string = typeof accountKeyRaw === 'string'
+                ? accountKeyRaw
+                : (accountKeyRaw?.pubkey ?? '');
 
               batchEvents.push({
                 signature: sig.signature,
@@ -93,8 +96,11 @@ export async function GET() {
               const preAmt = preBal.uiTokenAmount?.uiAmount ?? 0;
               if (preAmt <= 0) continue;
 
-              const accountKey: string =
-                tx.transaction?.message?.accountKeys?.[preBal.accountIndex] ?? '';
+              const accountKeyRaw =
+                tx.transaction?.message?.accountKeys?.[preBal.accountIndex];
+              const accountKey: string = typeof accountKeyRaw === 'string'
+                ? accountKeyRaw
+                : (accountKeyRaw?.pubkey ?? '');
 
               batchEvents.push({
                 signature: sig.signature,
