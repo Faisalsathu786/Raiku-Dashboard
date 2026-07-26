@@ -56,8 +56,8 @@ export function Sidebar() {
 
       <div className="absolute bottom-6 left-0 right-0 px-6">
         <div className="rounded-lg border border-border bg-surface-light p-4">
-          <p className="text-xs text-text-muted">Powered by</p>
-          <p className="text-sm font-medium text-text">Raiku Ecosystem</p>
+          <p className="text-xs text-text-muted">Developed By</p>
+          <p className="text-sm font-medium text-text">Crypto coach</p>
         </div>
       </div>
     </aside>
