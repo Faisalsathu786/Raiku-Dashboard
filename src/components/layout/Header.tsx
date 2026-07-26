@@ -2,7 +2,6 @@
 
 import { useState } from 'react';
 import { Menu } from 'lucide-react';
-import { WalletConnector } from '@/components/wallet/WalletConnector';
 
 interface HeaderProps {
   title: string;
@@ -24,9 +23,7 @@ export function Header({ title }: HeaderProps) {
         <h2 className="text-lg font-semibold text-text">{title}</h2>
       </div>
 
-      <div className="flex items-center gap-3">
-        <WalletConnector />
-      </div>
+      <div className="flex items-center gap-3" />
     </header>
   );
 }
