@@ -1,32 +1,23 @@
 'use client';
 
-import { ArrowDownLeft, ArrowUpRight } from 'lucide-react';
+import { ArrowDownLeft, ArrowUpRight, ExternalLink } from 'lucide-react';
 import { shortenAddress, formatNumber } from '@/utils/format';
 import clsx from 'clsx';
-
-const RECENT_ACTIONS: Array<{
-  address: string;
-  amount: number;
-  type: 'stake' | 'unstake';
-}> = [
-  { address: 'FcTYERGTnymbL1BDdXow9Z1RqZ1rE8AYbjs79d8hmGKq', amount: 71211.39, type: 'stake' },
-  { address: 'HrcoELSsegq3F2JtFv34g9Meu44mA4jaywiwoNV4fnCd', amount: 28804.41, type: 'stake' },
-  { address: '6CsD9U2EUSZpfQbQxVPUvdxZ9gwDdkEu2wUZt1JXfyRv', amount: 20826.75, type: 'stake' },
-  { address: 'AYhux5gJzu3ePp7HpuFJG1mNKkLL5Q6q5HgCvYmGCGvW', amount: 653.71, type: 'stake' },
-  { address: '4YpatyXDfNsNfn32r7xSZALcwFh77F7JNWM2PSNfekDd', amount: 555.56, type: 'stake' },
-  { address: '6GPu2patJNMpPtCMc7jeaPhs4X95ig68K3tY44qetz5z', amount: 404.15, type: 'stake' },
-  { address: 'FwkLodYCbF7SqWxq5oQEtth7TjsmfoUCEme4BUBYvqCX', amount: 162.33, type: 'stake' },
-  { address: 'EatQ6Lu9fqGbDKdK6cfAqBv7LxJ7gRjcmiZ8bbsMjQ3t', amount: 156.25, type: 'unstake' },
-  { address: '28eiZ4fAyg7boz6dZ2wcQqjMFdSNnQ2P7nAXRGjzoz6d', amount: 122.49, type: 'stake' },
-  { address: 'G3E5TyR5CX5TuRm2xYJfYRjByLCPNATFgTfgPDSfnRm9', amount: 100.73, type: 'unstake' },
-];
+import { useRecentActivity, type ActivityEvent } from '@/hooks/useRecentActivity';
 
 export function RecentActivity() {
+  const { events, loading } = useRecentActivity();
+
   return (
     <div className="rounded-xl border border-border bg-surface p-6">
       <h3 className="text-sm font-semibold text-text">Recent Activity</h3>
       <p className="text-xs text-text-muted mt-1">
-        Largest rkuSOL holders and staking positions
+        Live rkuSOL transactions from the Solana network
+        {events.length > 0 && (
+          <span className="ml-1 text-text-muted">
+            (updates every 30s)
+          </span>
+        )}
       </p>
 
       <div className="mt-4 overflow-hidden">
@@ -37,21 +28,38 @@ export function RecentActivity() {
                 <th className="pb-3 font-medium">Wallet</th>
                 <th className="pb-3 font-medium">Type</th>
                 <th className="pb-3 font-medium text-right">Amount</th>
-                <th className="pb-3 font-medium text-right">Share</th>
+                <th className="pb-3 font-medium text-right">Time</th>
+                <th className="pb-3 font-medium text-right">Tx</th>
               </tr>
             </thead>
             <tbody>
-              {RECENT_ACTIONS.slice(0, 8).map((item, i) => {
+              {loading && events.length === 0 && (
+                <tr>
+                  <td colSpan={5} className="py-8 text-center text-xs text-text-muted">
+                    Loading activity...
+                  </td>
+                </tr>
+              )}
+
+              {!loading && events.length === 0 && (
+                <tr>
+                  <td colSpan={5} className="py-8 text-center text-xs text-text-muted">
+                    No recent activity found
+                  </td>
+                </tr>
+              )}
+
+              {events.map((item, i) => {
                 const isStake = item.type === 'stake';
-                const share = ((item.amount / RECENT_ACTIONS.reduce((s, a) => s + a.amount, 0)) * 100).toFixed(1);
+                const time = formatTimestamp(item.timestamp);
 
                 return (
                   <tr
-                    key={i}
+                    key={item.signature + item.walletAddress}
                     className="border-b border-border/50 last:border-0"
                   >
-                    <td className="py-2.5 font-mono text-text">
-                      {shortenAddress(item.address)}
+                    <td className="py-2.5 font-mono text-text text-xs">
+                      {shortenAddress(item.walletAddress)}
                     </td>
                     <td className="py-2.5">
                       <span
@@ -71,10 +79,21 @@ export function RecentActivity() {
                       </span>
                     </td>
                     <td className="py-2.5 text-right text-text tabular-nums">
-                      {formatNumber(item.amount)} SOL
+                      {formatNumber(item.amount)}
                     </td>
-                    <td className="py-2.5 text-right text-text-muted tabular-nums">
-                      {share}%
+                    <td className="py-2.5 text-right text-text-muted tabular-nums text-xs">
+                      {time}
+                    </td>
+                    <td className="py-2.5 text-right">
+                      <a
+                        href={`https://solscan.io/tx/${item.signature}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex text-text-muted hover:text-primary transition-colors"
+                        title="View on Solscan"
+                      >
+                        <ExternalLink size={13} />
+                      </a>
                     </td>
                   </tr>
                 );
@@ -83,6 +102,32 @@ export function RecentActivity() {
           </table>
         </div>
       </div>
+
+      {events.length > 0 && (
+        <p className="mt-3 text-xs text-text-muted">
+          Showing {events.length} most recent transactions
+        </p>
+      )}
     </div>
   );
+}
+
+function formatTimestamp(iso: string): string {
+  const date = new Date(iso);
+  const now = Date.now();
+  const diff = now - date.getTime();
+  const mins = Math.floor(diff / 60_000);
+
+  if (mins < 1) return 'Just now';
+  if (mins < 60) return `${mins}m ago`;
+
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours}h ago`;
+
+  return date.toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
 }
