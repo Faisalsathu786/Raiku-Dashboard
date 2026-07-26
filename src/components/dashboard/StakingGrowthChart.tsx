@@ -8,19 +8,6 @@ interface StakingGrowthChartProps {
 }
 
 export function StakingGrowthChart({ data }: StakingGrowthChartProps) {
-  const hasData = data.length > 0;
-
-  if (!hasData) {
-    return (
-      <div className="rounded-xl border border-border bg-surface p-6">
-        <h3 className="text-sm font-semibold text-text">Staking Growth</h3>
-        <div className="mt-4 flex h-[300px] items-center justify-center text-sm text-text-muted">
-          Connect wallet to view staking growth data
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div className="rounded-xl border border-border bg-surface p-6">
       <div className="flex items-center justify-between mb-6">
