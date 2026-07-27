@@ -107,7 +107,7 @@ async function getTokenAccount(wallet: string): Promise<{ address: string; balan
 interface TxEvent {
   signature: string;
   blockTime: number;
-  type: 'stake' | 'unstake' | 'deposit' | 'withdraw';
+  type: 'stake' | 'unstake' | 'deposit-dapp' | 'withdraw-dapp';
   amount: number;
   dappName?: string;
   dappAddress?: string;
@@ -252,70 +252,50 @@ async function parseTransaction(
     if (Math.abs(diff) < 0.0001) return null;
 
     const blockTime = tx.blockTime ?? 0;
-
-    if (diff > 0) {
-      // Balance increased - someone sent rkuSOL to this wallet (stake)
-      return {
-        signature,
-        blockTime,
-        type: 'stake',
-        amount: diff,
-      };
-    }
-
-    // Balance decreased - check if it's a dApp deposit or unstake
     const dappPrograms = detectDappPrograms(tx);
+    
+    // Find if a known partnered dApp was involved in this transaction
+    let knownDAppName: string | null = null;
+    let knownDAppAddr: string | null = null;
 
-    // Check if any known dApp was involved
     for (const progId of dappPrograms) {
       if (DAPP_PROGRAMS[progId]) {
-        return {
-          signature,
-          blockTime,
-          type: 'withdraw', // temporarily used in tracking, will be shown as deposit
-          amount: Math.abs(diff),
-          dappName: DAPP_PROGRAMS[progId],
-          dappAddress: progId,
-        };
+        knownDAppName = DAPP_PROGRAMS[progId];
+        knownDAppAddr = progId;
+        break;
       }
     }
 
-    // Check if rkuSOL was sent to a known dApp (otherReceiver's owner is a dApp)
-    for (const receiver of otherReceivers) {
-      if (DAPP_PROGRAMS[receiver.owner]) {
-        return {
-          signature,
-          blockTime,
-          type: 'withdraw',
-          amount: Math.abs(diff),
-          dappName: DAPP_PROGRAMS[receiver.owner],
-          dappAddress: receiver.owner,
-        };
+    if (!knownDAppName) {
+      for (const receiver of otherReceivers) {
+        if (DAPP_PROGRAMS[receiver.owner]) {
+          knownDAppName = DAPP_PROGRAMS[receiver.owner];
+          knownDAppAddr = receiver.owner;
+          break;
+        }
       }
     }
 
-    // Check if receiver is a program (not a normal wallet) - heuristic for unknown dApps
-    for (const receiver of otherReceivers) {
-      if (receiver.owner.length >= 32 && !receiver.owner.endsWith('11111111111111111111111')) {
-        // Could be another program - treat as deposit
-        return {
-          signature,
-          blockTime,
-          type: 'withdraw',
-          amount: Math.abs(diff),
-          dappName: 'Unknown dApp',
-          dappAddress: receiver.owner,
-        };
+    if (diff > 0) {
+      // Balance increased - rkuSOL came to wallet
+      if (knownDAppName && knownDAppAddr) {
+        // Came BACK from a partnered dApp
+        return { signature, blockTime, type: 'withdraw-dapp', amount: diff,
+          dappName: knownDAppName, dappAddress: knownDAppAddr };
       }
+      // Fresh stake from Raiku
+      return { signature, blockTime, type: 'stake', amount: diff };
     }
 
-    // No dApp detected - this is an unstake (rkuSOL burned or sent to an exchange)
-    return {
-      signature,
-      blockTime,
-      type: 'unstake',
-      amount: Math.abs(diff),
-    };
+    // Balance decreased - rkuSOL left wallet
+    if (knownDAppName && knownDAppAddr) {
+      // Went TO a partnered dApp
+      return { signature, blockTime, type: 'deposit-dapp', amount: Math.abs(diff),
+        dappName: knownDAppName, dappAddress: knownDAppAddr };
+    }
+
+    // No partnered dApp involved - this is an unstake
+    return { signature, blockTime, type: 'unstake', amount: Math.abs(diff) };
   } catch {
     return null;
   }
@@ -435,11 +415,13 @@ export async function GET(request: NextRequest) {
       const balanceBefore = inWalletBalance;
 
       if (evt.type === 'stake') {
+        // Fresh rkuSOL received from Raiku
         inWalletBalance += evt.amount;
       } else if (evt.type === 'unstake') {
+        // rkuSOL left to non-partnered address = unstake
         inWalletBalance -= evt.amount;
-      } else if (evt.type === 'withdraw' && evt.dappName) {
-        // This is a DEPOSIT to dApp (rkuSOL left wallet to dApp)
+      } else if (evt.type === 'deposit-dapp' && evt.dappName) {
+        // rkuSOL went TO a partnered dApp
         inWalletBalance -= evt.amount;
         const key = evt.dappAddress || evt.dappName;
         const existing = depositedMap.get(key);
@@ -452,14 +434,24 @@ export async function GET(request: NextRequest) {
             amount: evt.amount,
           });
         }
+      } else if (evt.type === 'withdraw-dapp' && evt.dappName) {
+        // rkuSOL came BACK from a partnered dApp to wallet
+        inWalletBalance += evt.amount;
+        const key = evt.dappAddress || evt.dappName;
+        const existing = depositedMap.get(key);
+        if (existing) {
+          existing.amount -= evt.amount;
+          if (existing.amount <= 0) depositedMap.delete(key);
+        }
       }
 
       inWalletBalance = Math.max(0, Math.round(inWalletBalance * 1e6) / 1e6);
       const managedAfter = inWalletBalance + getDepositedTotal(depositedMap);
 
-      const displayType: 'stake' | 'deposit' | 'unstake' =
+      const displayType: 'stake' | 'deposit' | 'withdraw' | 'unstake' =
         evt.type === 'stake' ? 'stake' :
-        evt.type === 'withdraw' ? 'deposit' :
+        evt.type === 'deposit-dapp' ? 'deposit' :
+        evt.type === 'withdraw-dapp' ? 'withdraw' :
         'unstake';
 
       activity.push({

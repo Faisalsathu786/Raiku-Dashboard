@@ -294,15 +294,18 @@ function ActivityTimeline({
 
             const isStake = evt.type === 'stake';
             const isDeposit = evt.type === 'deposit';
-            const isPositive = isStake;
+            const isWithdraw = evt.type === 'withdraw';
+            const isPositive = isStake || isWithdraw;
 
             const iconBgColor = isStake
               ? 'bg-success/10 text-success'
               : isDeposit
               ? 'bg-yellow-400/10 text-yellow-400'
+              : isWithdraw
+              ? 'bg-primary/10 text-primary'
               : 'bg-danger/10 text-danger';
 
-            const IconComponent = isStake ? ArrowUpRight : isDeposit ? Building2 : ArrowDownRight;
+            const IconComponent = isStake ? ArrowUpRight : isDeposit ? Building2 : isWithdraw ? ArrowDownRight : ArrowDownRight;
 
             return (
               <div
@@ -318,7 +321,7 @@ function ActivityTimeline({
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
                     <span className="text-sm font-medium text-text">
-                      {isStake ? 'Staked' : isDeposit ? `Deposit to ${evt.dappName || 'dApp'}` : 'Unstaked'}
+                      {isStake ? 'Staked' : isDeposit ? `Deposit to ${evt.dappName || 'dApp'}` : isWithdraw ? `Withdrew from ${evt.dappName || 'dApp'}` : 'Unstaked'}
                     </span>
                     <span className="text-sm font-semibold text-text tabular-nums">
                       {formatNumber(evt.amount)} rkuSOL
