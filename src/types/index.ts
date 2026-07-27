@@ -47,12 +47,21 @@ export interface LeaderboardFilters {
 export interface PortfolioActivity {
   signature: string;
   timestamp: string;
-  type: 'stake' | 'unstake';
+  type: 'stake' | 'unstake' | 'deposit' | 'withdraw';
   amount: number;
   balanceBefore: number;
   balanceAfter: number;
   daysSinceLastEvent: number;
   pointsEarned: number;
+  dappName?: string;
+  dappAddress?: string;
+}
+
+export interface DappDeposit {
+  dappName: string;
+  dappAddress: string;
+  amount: number;
+  detectedAt: string;
 }
 
 export interface PortfolioPeriod {
@@ -61,11 +70,15 @@ export interface PortfolioPeriod {
   balance: number;
   days: number;
   points: number;
+  // managedBalance includes in-wallet + deposited amounts
+  managedBalance?: number;
 }
 
 export interface PortfolioData {
   walletAddress: string;
   currentBalance: number;
+  depositedBalance: number;
+  managedBalance: number;
   solValue: number;
   usdValue: number;
   totalPoints: number;
@@ -77,4 +90,5 @@ export interface PortfolioData {
   activity: PortfolioActivity[];
   periods: PortfolioPeriod[];
   tokenAccounts: Array<{ address: string; amount: number }>;
+  dappDeposits: DappDeposit[];
 }

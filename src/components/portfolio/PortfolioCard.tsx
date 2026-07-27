@@ -10,6 +10,7 @@ import {
   ArrowUpRight,
   ArrowDownRight,
   ExternalLink,
+  Building2,
 } from 'lucide-react';
 import type { PortfolioData } from '@/types';
 
@@ -49,9 +50,9 @@ export function PortfolioCard({ data }: PortfolioCardProps) {
       <div className="grid gap-6 lg:grid-cols-4">
         <StatCard
           icon={<Coins size={18} />}
-          label="rkuSOL Balance"
-          value={formatNumber(data.currentBalance)}
-          sub={`${formatNumber(data.solValue)} SOL`}
+          label="Total rkuSOL Managed"
+          value={formatNumber(data.managedBalance)}
+          sub={`In wallet: ${formatNumber(data.currentBalance)}`}
           color="primary"
         />
         <StatCard
@@ -77,11 +78,54 @@ export function PortfolioCard({ data }: PortfolioCardProps) {
         />
       </div>
 
+      {/* dApp Deposits Section */}
+      {data.dappDeposits.length > 0 && (
+        <div className="rounded-xl border border-border bg-surface p-6">
+          <div className="flex items-center gap-2 mb-4">
+            <Building2 size={16} className="text-yellow-400" />
+            <h3 className="text-sm font-semibold text-text">
+              rkuSOL Deposited in dApps ({formatNumber(data.depositedBalance)} rkuSOL)
+            </h3>
+          </div>
+          <p className="text-xs text-text-muted mb-4">
+            Your rkuSOL is working in these protocols - points are still earning on the full balance.
+          </p>
+          <div className="space-y-2">
+            {data.dappDeposits.map((dep, i) => (
+              <div
+                key={i}
+                className="flex items-center justify-between rounded-lg bg-surface-light px-4 py-3"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="flex h-8 w-8 items-center justify-center rounded-full bg-yellow-400/10 text-yellow-400 text-xs font-bold">
+                    {dep.dappName.charAt(0)}
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-text">{dep.dappName}</p>
+                    <a
+                      href={`https://solscan.io/account/${dep.dappAddress}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-[10px] text-text-muted hover:text-primary transition-colors"
+                    >
+                      View protocol
+                    </a>
+                  </div>
+                </div>
+                <span className="text-sm font-semibold text-yellow-400 tabular-nums">
+                  {formatNumber(dep.amount)} rkuSOL
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       <div className="grid gap-6 lg:grid-cols-2">
         <div className="rounded-xl border border-border bg-surface p-6">
           <h3 className="text-sm font-semibold text-text">Total Points (Time-Weighted)</h3>
           <p className="text-xs text-text-muted mt-1">
-            Permanent points calculated across all holding periods
+            Points calculated on your full managed balance (wallet + deposits)
           </p>
           <div className="mt-4">
             <p className="text-3xl font-bold text-accent">
@@ -103,13 +147,17 @@ export function PortfolioCard({ data }: PortfolioCardProps) {
               {formatNumber(data.estimatedRewards)} rkuSOL
             </p>
             <p className="text-xs text-text-muted mt-1">
-              ~{formatUsd(data.estimatedRewards * 75.9)}
+              ~{formatUsd(data.estimatedRewards * data.exchangeRate * (data.solValue > 0 ? data.usdValue / data.solValue : 75.9))}
             </p>
           </div>
         </div>
       </div>
 
-      <ActivityTimeline activity={data.activity} periods={data.periods} totalPoints={data.totalPoints} />
+      <ActivityTimeline
+        activity={data.activity}
+        periods={data.periods}
+        totalPoints={data.totalPoints}
+      />
     </div>
   );
 }
@@ -171,8 +219,9 @@ function ActivityTimeline({
                 <tr className="border-b border-border text-left text-xs text-text-muted">
                   <th className="pb-3 font-medium">Period</th>
                   <th className="pb-3 font-medium text-right">Balance</th>
+                  <th className="pb-3 font-medium text-right">Managed</th>
                   <th className="pb-3 font-medium text-right">Days</th>
-                  <th className="pb-3 font-medium text-right">Points Earned</th>
+                  <th className="pb-3 font-medium text-right">Points</th>
                 </tr>
               </thead>
               <tbody>
@@ -198,6 +247,9 @@ function ActivityTimeline({
                       <td className="py-3 text-right text-text tabular-nums">
                         {formatNumber(p.balance)} rkuSOL
                       </td>
+                      <td className="py-3 text-right text-yellow-400 tabular-nums">
+                        {p.managedBalance != null ? formatNumber(p.managedBalance) : formatNumber(p.balance)} rkuSOL
+                      </td>
                       <td className="py-3 text-right text-text-muted tabular-nums">
                         {p.days}d
                       </td>
@@ -208,7 +260,7 @@ function ActivityTimeline({
                   );
                 })}
                 <tr className="border-t-2 border-border">
-                  <td colSpan={3} className="py-3 text-right text-sm font-semibold text-text">
+                  <td colSpan={4} className="py-3 text-right text-sm font-semibold text-text">
                     Total Points
                   </td>
                   <td className="py-3 text-right text-sm font-bold text-accent tabular-nums">
@@ -239,7 +291,18 @@ function ActivityTimeline({
               hour: '2-digit',
               minute: '2-digit',
             });
+
             const isStake = evt.type === 'stake';
+            const isDeposit = evt.type === 'deposit';
+            const isPositive = isStake;
+
+            const iconBgColor = isStake
+              ? 'bg-success/10 text-success'
+              : isDeposit
+              ? 'bg-yellow-400/10 text-yellow-400'
+              : 'bg-danger/10 text-danger';
+
+            const IconComponent = isStake ? ArrowUpRight : isDeposit ? Building2 : ArrowDownRight;
 
             return (
               <div
@@ -247,17 +310,15 @@ function ActivityTimeline({
                 className="flex items-center gap-3 rounded-lg px-3 py-2.5 hover:bg-surface-light transition-colors"
               >
                 <div
-                  className={`flex h-7 w-7 items-center justify-center rounded-full flex-shrink-0 ${
-                    isStake ? 'bg-success/10 text-success' : 'bg-danger/10 text-danger'
-                  }`}
+                  className={`flex h-7 w-7 items-center justify-center rounded-full flex-shrink-0 ${iconBgColor}`}
                 >
-                  {isStake ? <ArrowUpRight size={14} /> : <ArrowDownRight size={14} />}
+                  <IconComponent size={14} />
                 </div>
 
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
                     <span className="text-sm font-medium text-text">
-                      {isStake ? 'Staked' : 'Unstaked'}
+                      {isStake ? 'Staked' : isDeposit ? `Deposit to ${evt.dappName || 'dApp'}` : 'Unstaked'}
                     </span>
                     <span className="text-sm font-semibold text-text tabular-nums">
                       {formatNumber(evt.amount)} rkuSOL
@@ -268,7 +329,7 @@ function ActivityTimeline({
                   </div>
                   <div className="flex items-center gap-3 text-xs text-text-muted mt-0.5">
                     <span>
-                      Balance: {formatNumber(evt.balanceBefore)} {isStake ? '>' : '<'}{' '}
+                      Balance: {formatNumber(evt.balanceBefore)} {isPositive ? '>' : '<'}{' '}
                       {formatNumber(evt.balanceAfter)} rkuSOL
                     </span>
                     {evt.daysSinceLastEvent > 0 && (
