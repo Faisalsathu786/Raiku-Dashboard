@@ -8,7 +8,7 @@ import { useStakingData } from '@/hooks/useStakingData';
 import { StatsGrid } from '@/components/dashboard/StatsGrid';
 
 export default function LeaderboardPage() {
-  const { entries, filters, updateFilters, loading } = useLeaderboard();
+  const { entries, total, filters, updateFilters, loading } = useLeaderboard();
   const { stats, loading: statsLoading } = useStakingData();
 
   return (
@@ -24,7 +24,7 @@ export default function LeaderboardPage() {
             <p className="text-xs text-text-muted mt-0.5">
               {loading
                 ? 'Loading...'
-                : `${entries.length} holders ranked by ${filters.sortBy === 'sol' ? 'rkuSOL staked' : 'estimated points'} · days & points from on-chain activity, updated every 30s`}
+                : `${total} total holders · showing top ${entries.length} · ${filters.sortBy === 'sol' ? 'rkuSOL staked' : 'estimated points'} · on-chain, updated every 30s`}
             </p>
           </div>
           <LeaderboardFiltersPanel

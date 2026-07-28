@@ -17,6 +17,7 @@ export function useLeaderboard(initialFilters?: Partial<LeaderboardFilters>) {
     ...initialFilters,
   });
   const [entries, setEntries] = useState<LeaderboardEntry[]>([]);
+  const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
 
   const fetchLeaderboard = useCallback(async () => {
@@ -29,8 +30,10 @@ export function useLeaderboard(initialFilters?: Partial<LeaderboardFilters>) {
       const res = await fetch(`/api/leaderboard?${params}`);
       const data = (await res.json()) as LeaderboardResponse;
       setEntries(data.entries ?? []);
+      setTotal(data.total ?? data.entries?.length ?? 0);
     } catch {
       setEntries([]);
+      setTotal(0);
     } finally {
       setLoading(false);
     }
@@ -49,5 +52,5 @@ export function useLeaderboard(initialFilters?: Partial<LeaderboardFilters>) {
     []
   );
 
-  return { entries, filters, updateFilters, loading };
+  return { entries, total, filters, updateFilters, loading };
 }
