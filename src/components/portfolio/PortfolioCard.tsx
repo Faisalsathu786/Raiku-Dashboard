@@ -132,7 +132,8 @@ export function PortfolioCard({ data }: PortfolioCardProps) {
               {formatPoints(data.totalPoints)}
             </p>
             <p className="text-xs text-text-muted mt-1">
-              Points are never lost - they lock in for each period you hold
+              <span className="text-green-400 font-medium">+{formatPoints(data.pointsPerDay)} pts/day</span>
+              {' · '}Points are never lost - they lock in for each period you hold
             </p>
           </div>
         </div>

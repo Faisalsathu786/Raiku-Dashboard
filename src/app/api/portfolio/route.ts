@@ -520,6 +520,7 @@ export async function GET(request: NextRequest) {
       exchangeRate,
       daysSinceFirstStake,
       firstStakedAt: firstStakeTime > 0 ? new Date(firstStakeTime * 1000).toISOString() : null,
+      pointsPerDay: Math.floor(managedBalance * POINTS_PER_SOL_PER_DAY),
       activity,
       periods,
       tokenAccounts: tokenAccount ? [{ address: ataAddress, amount: currentBalance }] : [],

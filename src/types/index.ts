@@ -82,6 +82,7 @@ export interface PortfolioData {
   solValue: number;
   usdValue: number;
   totalPoints: number;
+  pointsPerDay: number;
   estimatedRewards: number;
   apy: number;
   exchangeRate: number;

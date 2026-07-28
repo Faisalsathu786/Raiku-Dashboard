@@ -24,7 +24,7 @@ export default function LeaderboardPage() {
             <p className="text-xs text-text-muted mt-0.5">
               {loading
                 ? 'Loading...'
-                : `${entries.length} holders ranked by ${filters.sortBy === 'sol' ? 'rkuSOL staked' : 'estimated points'}, est. days based on token launch date`}
+                : `${entries.length} holders ranked by ${filters.sortBy === 'sol' ? 'rkuSOL staked' : 'estimated points'} · days & points from on-chain activity, updated every 30s`}
             </p>
           </div>
           <LeaderboardFiltersPanel

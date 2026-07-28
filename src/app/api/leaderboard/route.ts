@@ -1,44 +1,24 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { PublicKey } from '@solana/web3.js';
 
 const RKUSOL_MINT = 'rkubjTrZYioRSeXwDnhwGQzvW3qkcin72JSxUt3WMVp';
 const SOLANA_RPC = 'https://api.mainnet-beta.solana.com';
 const POINTS_PER_SOL_PER_DAY = 1;
+const CONCURRENCY = 5;
 
-let cachedDaysSinceLaunch: number | null = null;
+let mintDecimals: number | null = null;
 
-async function getDaysSinceLaunch(): Promise<number> {
-  if (cachedDaysSinceLaunch !== null) return cachedDaysSinceLaunch;
+const SOLANA_RPC_FETCH = 'https://api.mainnet-beta.solana.com';
 
-  try {
-    const tokenAccounts = await getProgramAccounts();
-    if (tokenAccounts.length > 0) {
-      const firstAccountPubkey = tokenAccounts[0].pubkey;
-      const sigs = (await fetchRpc('getSignaturesForAddress', [
-        firstAccountPubkey,
-        { limit: 1000 },
-      ])) as Array<{ signature: string }> | undefined;
-
-      if (sigs && sigs.length > 0) {
-        const oldestSig = sigs[sigs.length - 1].signature;
-        const tx = (await fetchRpc('getTransaction', [
-          oldestSig,
-          { encoding: 'jsonParsed', maxSupportedTransactionVersion: 0 },
-        ])) as { blockTime?: number } | undefined;
-
-        if (tx?.blockTime) {
-          cachedDaysSinceLaunch = Math.floor(
-            (Date.now() - tx.blockTime * 1000) / 86_400_000
-          );
-          return cachedDaysSinceLaunch ?? 26;
-        }
-      }
-    }
-  } catch {
-    // fall through to default
-  }
-
-  cachedDaysSinceLaunch = 26;
-  return cachedDaysSinceLaunch;
+async function fetchRpc(method: string, params: unknown[]) {
+  const res = await fetch(SOLANA_RPC_FETCH, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }),
+    next: { revalidate: 30 },
+  });
+  const data = await res.json();
+  return data?.result;
 }
 
 async function getProgramAccounts() {
@@ -52,15 +32,54 @@ async function getProgramAccounts() {
   return (res as any[]) ?? [];
 }
 
-async function fetchRpc(method: string, params: unknown[]): Promise<unknown> {
-  const res = await fetch(SOLANA_RPC, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }),
-    next: { revalidate: 30 },
-  });
-  const data = await res.json();
-  return data?.result;
+function deriveAtaAddress(ownerPubkey: string): string | null {
+  try {
+    const walletPubkey = new PublicKey(ownerPubkey);
+    const mintPubkey = new PublicKey(RKUSOL_MINT);
+    const tokenProgramId = new PublicKey('TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA');
+    const ataProgramId = new PublicKey('ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL');
+    const [ata] = PublicKey.findProgramAddressSync(
+      [walletPubkey.toBuffer(), tokenProgramId.toBuffer(), mintPubkey.toBuffer()],
+      ataProgramId
+    );
+    return ata.toBase58();
+  } catch {
+    return null;
+  }
+}
+
+/** Fetch the oldest signature blockTime for a token account ATA */
+async function getOldestBlockTime(ataAddress: string): Promise<number | null> {
+  try {
+    // Get all signatures (max 1000), last one = oldest
+    const sigs = (await fetchRpc('getSignaturesForAddress', [
+      ataAddress,
+      { limit: 1000 },
+    ])) as Array<{ signature: string; blockTime: number | null }> | undefined;
+
+    if (!sigs || sigs.length === 0) return null;
+
+    // Last element = oldest signature
+    const oldest = sigs[sigs.length - 1];
+    return oldest.blockTime ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/** Run async tasks with concurrency limit */
+async function mapConcurrent<T, R>(
+  items: T[],
+  fn: (item: T, index: number) => Promise<R>,
+  concurrency: number
+): Promise<R[]> {
+  const results: R[] = [];
+  for (let i = 0; i < items.length; i += concurrency) {
+    const batch = items.slice(i, i + concurrency);
+    const batchResults = await Promise.all(batch.map((item, bIdx) => fn(item, i + bIdx)));
+    results.push(...batchResults);
+  }
+  return results;
 }
 
 interface HolderEntry {
@@ -69,6 +88,7 @@ interface HolderEntry {
   solStaked: number;
   estimatedPoints: number;
   daysHeld: number;
+  firstStakedAt: string | null;
 }
 
 export async function GET(request: NextRequest) {
@@ -77,12 +97,10 @@ export async function GET(request: NextRequest) {
   const sortBy = searchParams.get('sortBy') || 'sol';
 
   try {
-    const [daysSinceLaunch, accounts] = await Promise.all([
-      getDaysSinceLaunch(),
-      getProgramAccounts(),
-    ]);
+    const accounts = await getProgramAccounts();
 
-    const holders: Array<{ address: string; amount: number }> = [];
+    // Parse holders with balance > 0
+    const rawHolders: Array<{ address: string; amount: number }> = [];
     for (const acc of accounts) {
       const parsed = acc?.account?.data?.parsed;
       const info = parsed?.info;
@@ -90,39 +108,80 @@ export async function GET(request: NextRequest) {
       const amount = info?.tokenAmount?.uiAmount ?? 0;
       const owner = info?.owner ?? '';
       if (owner && amount > 0) {
-        holders.push({ address: owner, amount });
+        rawHolders.push({ address: owner, amount });
       }
     }
 
-    holders.sort((a, b) => b.amount - a.amount);
-    const topHolders = holders.slice(0, limit);
+    // Sort by balance descending, take top N
+    rawHolders.sort((a, b) => b.amount - a.amount);
+    const topHolders = rawHolders.slice(0, limit);
 
-    const entries: HolderEntry[] = topHolders.map((h, i) => {
-      const points = Math.floor(h.amount * daysSinceLaunch * POINTS_PER_SOL_PER_DAY);
+    // Derive ATA addresses
+    const holderAtaPairs = topHolders.map((h) => ({
+      address: h.address,
+      amount: h.amount,
+      ata: deriveAtaAddress(h.address),
+    }));
+
+    // Fetch oldest blockTime for each holder (concurrent)
+    const blockTimes = await mapConcurrent(
+      holderAtaPairs,
+      async (h) => {
+        if (!h.ata) return { address: h.address, oldestBlockTime: null };
+        const bt = await getOldestBlockTime(h.ata);
+        return { address: h.address, oldestBlockTime: bt };
+      },
+      CONCURRENCY
+    );
+
+    const blockTimeMap = new Map<string, number | null>();
+    for (const bt of blockTimes) {
+      blockTimeMap.set(bt.address, bt.oldestBlockTime);
+    }
+
+    const now = Date.now() / 1000;
+
+    const entries: HolderEntry[] = holderAtaPairs.map((h, i) => {
+      const oldestBt = blockTimeMap.get(h.address);
+      const daysHeld = oldestBt
+        ? Math.max(0, Math.floor((now - oldestBt) / 86_400))
+        : 0;
+      const points = Math.floor(h.amount * Math.max(1, daysHeld) * POINTS_PER_SOL_PER_DAY);
       return {
         rank: i + 1,
         walletAddress: h.address,
         solStaked: h.amount,
         estimatedPoints: points,
-        daysHeld: daysSinceLaunch,
+        daysHeld,
+        firstStakedAt: oldestBt ? new Date(oldestBt * 1000).toISOString() : null,
       };
     });
 
     if (sortBy === 'points') {
       entries.sort((a, b) => b.estimatedPoints - a.estimatedPoints);
-      entries.forEach((e, i) => {
-        e.rank = i + 1;
-      });
+      entries.forEach((e, i) => { e.rank = i + 1; });
+    }
+
+    // Compute days since launch for overall context
+    let daysSinceLaunch = 26;
+    if (entries.length > 0) {
+      const firstEntry = entries.reduce((earliest, e) =>
+        e.firstStakedAt && (!earliest.firstStakedAt || e.firstStakedAt < earliest.firstStakedAt) ? e : earliest
+      );
+      if (firstEntry.firstStakedAt) {
+        const launchTime = new Date(firstEntry.firstStakedAt).getTime();
+        daysSinceLaunch = Math.max(26, Math.floor((Date.now() - launchTime) / 86_400_000));
+      }
     }
 
     return NextResponse.json({
       entries,
       total: entries.length,
       daysSinceLaunch,
+      computedAt: new Date().toISOString(),
     });
   } catch (error) {
-    const message =
-      error instanceof Error ? error.message : 'Failed to fetch leaderboard';
+    const message = error instanceof Error ? error.message : 'Failed to fetch leaderboard';
     return NextResponse.json(
       { entries: [], total: 0, error: message },
       { status: 200 }
