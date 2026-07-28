@@ -203,6 +203,9 @@ export async function GET(request: NextRequest) {
       const bal = verified.get(h.owner);
       if (bal != null && bal > 0) {
         finalHolders.push({ ...h, amount: bal });
+      } else if (h.amount > 0) {
+        // Not verified (beyond top N) — use getProgramAccounts balance directly
+        finalHolders.push({ ...h, amount: h.amount });
       }
     }
     finalHolders.sort((a, b) => b.amount - a.amount);
