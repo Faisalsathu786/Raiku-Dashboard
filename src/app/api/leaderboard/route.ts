@@ -4,14 +4,11 @@ import { PublicKey } from '@solana/web3.js';
 const RKUSOL_MINT = 'rkubjTrZYioRSeXwDnhwGQzvW3qkcin72JSxUt3WMVp';
 const SOLANA_RPC = 'https://api.mainnet-beta.solana.com';
 const POINTS_PER_SOL_PER_DAY = 1;
-const CONCURRENCY = 10;
-const PAGE_SIZE = 1000;
-const MAX_PAGES = 3;
-const RPC_TIMEOUT_MS = 5000;
+const CONCURRENCY = 8;
 
 async function fetchRpc(method: string, params: unknown[]) {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), RPC_TIMEOUT_MS);
+  const timeout = setTimeout(() => controller.abort(), 8000);
   try {
     const res = await fetch(SOLANA_RPC, {
       method: 'POST',
@@ -20,45 +17,27 @@ async function fetchRpc(method: string, params: unknown[]) {
       signal: controller.signal,
       next: { revalidate: 10 },
     });
-    const data = await res.json();
-    return data?.result;
-  } finally {
-    clearTimeout(timeout);
-  }
+    return (await res.json())?.result;
+  } finally { clearTimeout(timeout); }
 }
 
-function deriveAta(owner: string): string | null {
-  try {
-    const wallet = new PublicKey(owner);
-    const mint = new PublicKey(RKUSOL_MINT);
-    const tokenProg = new PublicKey('TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA');
-    const ataProg = new PublicKey('ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL');
-    const [ata] = PublicKey.findProgramAddressSync(
-      [wallet.toBuffer(), tokenProg.toBuffer(), mint.toBuffer()], ataProg
-    );
-    return ata.toBase58();
-  } catch { return null; }
-}
-
-// ── Step 1: Get all token accounts from getProgramAccounts ──
-
-async function discoverAllAccounts(): Promise<Array<{ pubkey: string; owner: string }>> {
+// ── Method A: getProgramAccounts (fast, finds 900+ holders, balance is generally correct) ──
+async function discoverAll(): Promise<Array<{ pubkey: string; owner: string; amount: number }>> {
   for (let attempt = 1; attempt <= 3; attempt++) {
     try {
       const res = await fetchRpc('getProgramAccounts', [
         'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA',
         { encoding: 'jsonParsed', filters: [{ memcmp: { offset: 0, bytes: RKUSOL_MINT } }] },
       ]);
-      const accounts = (res as any[]) ?? [];
-      const result: Array<{ pubkey: string; owner: string }> = [];
-      for (const acc of accounts) {
+      const list: Array<{ pubkey: string; owner: string; amount: number }> = [];
+      for (const acc of (res as any[]) ?? []) {
         const info = acc?.account?.data?.parsed?.info;
         if (!info) continue;
-        const uiAmt = info?.tokenAmount?.uiAmount ?? 0;
+        const amt = info?.tokenAmount?.uiAmount ?? 0;
         const owner = info?.owner ?? '';
-        if (owner && uiAmt > 0) result.push({ pubkey: acc.pubkey, owner });
+        if (owner && amt > 0) list.push({ pubkey: acc.pubkey, owner, amount: amt });
       }
-      if (result.length >= 400 || attempt >= 3) return result;
+      if (list.length >= 400 || attempt >= 3) return list;
       await new Promise((r) => setTimeout(r, 500));
     } catch {
       if (attempt >= 3) return [];
@@ -68,17 +47,16 @@ async function discoverAllAccounts(): Promise<Array<{ pubkey: string; owner: str
   return [];
 }
 
-// ── Step 2: Get authoritative top 20 from getTokenLargestAccounts ──
-
-async function getLargestWithOwners(): Promise<Array<{ pubkey: string; owner: string; amount: number }>> {
+// ── Method B: getTokenLargestAccounts (authoritative top 20) ──
+async function getLargest(): Promise<Array<{ pubkey: string; owner: string; amount: number }>> {
   const results: Array<{ pubkey: string; owner: string; amount: number }> = [];
   try {
-    const res = (await fetchRpc('getTokenLargestAccounts', [RKUSOL_MINT])) as
+    const top = (await fetchRpc('getTokenLargestAccounts', [RKUSOL_MINT])) as
       Array<{ address: string; uiAmount: number }> | undefined;
-    if (!res) return results;
+    if (!top) return results;
 
-    for (let i = 0; i < res.length; i += CONCURRENCY) {
-      const batch = res.slice(i, i + CONCURRENCY);
+    for (let i = 0; i < top.length; i += CONCURRENCY) {
+      const batch = top.slice(i, i + CONCURRENCY);
       const owners = await Promise.allSettled(
         batch.map(async (entry) => {
           if (!entry.uiAmount || entry.uiAmount <= 0) return null;
@@ -91,28 +69,24 @@ async function getLargestWithOwners(): Promise<Array<{ pubkey: string; owner: st
         if (r.status === 'fulfilled' && r.value) results.push(r.value);
       }
     }
-  } catch { /* partial ok */ }
+  } catch { /* partial */ }
   return results;
 }
 
-// ── Step 3: Quick verify a single balance ──
-
-async function verifyBalance(pubkey: string): Promise<number | null> {
+// ── Quickly verify a single balance ──
+async function verifyOne(pubkey: string): Promise<number | null> {
   try {
     const res = await fetchRpc('getTokenAccountBalance', [pubkey]);
     return res?.value?.uiAmount ?? null;
   } catch { return null; }
 }
 
-// ── Step 4: Oldest blockTime (paginated) ──
-
+// ── Paginated oldest blockTime ──
 async function getOldestBlockTime(pubkey: string): Promise<number | null> {
   let beforeSig: string | undefined;
-  let pages = 0;
   let oldest: number | null = null;
-  while (pages < MAX_PAGES) {
-    pages++;
-    const params: any = { limit: PAGE_SIZE };
+  for (let p = 0; p < 3; p++) {
+    const params: any = { limit: 1000 };
     if (beforeSig) params.before = beforeSig;
     try {
       const sigs = (await fetchRpc('getSignaturesForAddress', [pubkey, params])) as
@@ -120,7 +94,7 @@ async function getOldestBlockTime(pubkey: string): Promise<number | null> {
       if (!sigs || sigs.length === 0) break;
       const batchOldest = sigs[sigs.length - 1];
       if (batchOldest.blockTime != null) oldest = batchOldest.blockTime;
-      if (sigs.length < PAGE_SIZE) break;
+      if (sigs.length < 1000) break;
       beforeSig = sigs[sigs.length - 1].signature;
     } catch { break; }
   }
@@ -142,95 +116,108 @@ export async function GET(request: NextRequest) {
   const sortBy = searchParams.get('sortBy') || 'sol';
 
   try {
-    // ── Phase 1: Gather candidates ──
+    // ── Phase 1: Gather candidates from both methods ──
+    const [allPgm, largest] = await Promise.all([discoverAll(), getLargest()]);
 
-    // Method A: getProgramAccounts (broad but balance may be stale)
-    const discovered = await discoverAllAccounts();
-    // Method B: getTokenLargestAccounts (authoritative top 20)
-    const largest = await getLargestWithOwners();
+    // Build map: owner → { pubkey, amount }
+    // Priority: largest accounts override program accounts
+    const holderMap = new Map<string, { pubkey: string; amount: number }>();
 
-    // Merge: largest accounts override/join discovered
-    // Build a map: wallet_address → token_pubkey from largest first (authoritative balance later)
-    const walletToToken = new Map<string, string>();
-    const seenPubkeys = new Set<string>();
-
-    // Insert largest first so they take priority
-    for (const l of largest) {
-      walletToToken.set(l.owner, l.pubkey);
-      seenPubkeys.add(l.pubkey);
-    }
-
-    // Add remaining from discovered
-    for (const d of discovered) {
-      if (!seenPubkeys.has(d.pubkey)) {
-        if (!walletToToken.has(d.owner)) {
-          walletToToken.set(d.owner, d.pubkey);
-        }
-        seenPubkeys.add(d.pubkey);
+    // Insert from program accounts first (these provide the broadest coverage)
+    for (const h of allPgm) {
+      if (!holderMap.has(h.owner) || h.amount > (holderMap.get(h.owner)?.amount ?? 0)) {
+        holderMap.set(h.owner, { pubkey: h.pubkey, amount: h.amount });
       }
     }
 
-    // ── Phase 2: Verify balances (quick, top priority holders first) ──
-
-    // Process in priority order: largest-accounts first, then by program-accounts order
-    const priorityList: Array<{ owner: string; pubkey: string; priority: 'high' | 'normal' }> = [];
+    // Override with getTokenLargestAccounts data (authoritative amounts)
     for (const l of largest) {
-      priorityList.push({ owner: l.owner, pubkey: l.pubkey, priority: 'high' });
-    }
-    for (const [owner, pubkey] of walletToToken) {
-      if (!priorityList.some((p) => p.owner === owner)) {
-        priorityList.push({ owner, pubkey, priority: 'normal' });
+      const existing = holderMap.get(l.owner);
+      // If this largest account has a HIGHER balance than what we found, update
+      if (!existing || l.amount > existing.amount) {
+        holderMap.set(l.owner, { pubkey: l.pubkey, amount: l.amount });
       }
     }
 
-    // Verify balances — process high priority first
+    // Build sorted list by balance descending
+    const allHolders: Array<{ owner: string; pubkey: string; amount: number }> = [];
+    for (const [owner, info] of holderMap) {
+      allHolders.push({ owner, pubkey: info.pubkey, amount: info.amount });
+    }
+    allHolders.sort((a, b) => b.amount - a.amount);
+
+    // ── Phase 2: Verify top N holders (re-check balance for accuracy) ──
+    const verifyCount = Math.min(limit + 20, allHolders.length);
     const verified = new Map<string, number>();
+    const verifyTargets = allHolders.slice(0, verifyCount);
 
-    for (let i = 0; i < priorityList.length; i += CONCURRENCY) {
-      const batch = priorityList.slice(i, i + CONCURRENCY);
+    for (let i = 0; i < verifyTargets.length; i += CONCURRENCY) {
+      const batch = verifyTargets.slice(i, i + CONCURRENCY);
       const results = await Promise.allSettled(
         batch.map(async (h) => {
-          const bal = await verifyBalance(h.pubkey);
-          return { owner: h.owner, balance: bal };
+          const bal = await verifyOne(h.pubkey);
+          return { owner: h.owner, balance: bal ?? h.amount };
         })
       );
       for (const r of results) {
-        if (r.status === 'fulfilled' && r.value.balance != null && r.value.balance > 0) {
+        if (r.status === 'fulfilled' && r.value.balance > 0) {
           verified.set(r.value.owner, r.value.balance);
         }
       }
-      // If we've processed 200+ total accounts and found enough, stop early
-      if (i + CONCURRENCY >= 200 && verified.size >= limit + 20) break;
+    }
+
+    // If some top holders failed verification, keep their program-accounts balance as fallback
+    for (const h of verifyTargets) {
+      if (!verified.has(h.owner)) {
+        // Also try deriving ATA and checking that
+        try {
+          const wallet = new PublicKey(h.owner);
+          const mint = new PublicKey(RKUSOL_MINT);
+          const tokenProg = new PublicKey('TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA');
+          const ataProg = new PublicKey('ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL');
+          const [ata] = PublicKey.findProgramAddressSync(
+            [wallet.toBuffer(), tokenProg.toBuffer(), mint.toBuffer()], ataProg
+          );
+          if (ata.toBase58() !== h.pubkey) {
+            const altBal = await verifyOne(ata.toBase58());
+            if (altBal != null && altBal > 0) {
+              verified.set(h.owner, altBal);
+              continue;
+            }
+          }
+        } catch { /* skip */ }
+        // Fallback: use original amount from getProgramAccounts
+        if (h.amount > 0) verified.set(h.owner, h.amount);
+      }
     }
 
     if (verified.size === 0) {
-      return NextResponse.json({ entries: [], total: 0, error: 'No verified holders' }, { status: 200 });
+      return NextResponse.json({ entries: [], total: 0, error: 'No holders found' }, { status: 200 });
     }
 
-    // ── Phase 3: Build sorted candidate list ──
+    // ── Phase 3: Build final list with verified balances ──
+    const now = Date.now() / 1000;
+    const finalHolders: Array<{ owner: string; pubkey: string; amount: number }> = [];
 
-    const candidates: Array<{ owner: string; pubkey: string; amount: number }> = [];
-    for (const [owner, pubkey] of walletToToken) {
-      const bal = verified.get(owner);
+    for (const h of allHolders) {
+      const bal = verified.get(h.owner);
       if (bal != null && bal > 0) {
-        candidates.push({ owner, pubkey, amount: bal });
+        finalHolders.push({ ...h, amount: bal });
       }
     }
-    candidates.sort((a, b) => b.amount - a.amount);
+    finalHolders.sort((a, b) => b.amount - a.amount);
+    const topFinal = finalHolders.slice(0, limit);
 
-    const topCandidates = candidates.slice(0, Math.max(limit, 30));
-    const now = Date.now() / 1000;
-
-    // ── Phase 4: Get oldest blockTime for days calculation ──
-
+    // ── Phase 4: Get oldest blockTime ──
     const btMap = new Map<string, number | null>();
-    for (let i = 0; i < topCandidates.length; i += CONCURRENCY) {
-      const batch = topCandidates.slice(i, i + CONCURRENCY);
+    for (let i = 0; i < topFinal.length; i += CONCURRENCY) {
+      const batch = topFinal.slice(i, i + CONCURRENCY);
       const results = await Promise.allSettled(
         batch.map(async (h) => {
-          let bt: number | null = null;
-          try { bt = await getOldestBlockTime(h.pubkey); } catch { /* use null */ }
-          return { owner: h.owner, bt };
+          try {
+            const bt = await getOldestBlockTime(h.pubkey);
+            return { owner: h.owner, bt };
+          } catch { return { owner: h.owner, bt: null }; }
         })
       );
       for (const r of results) {
@@ -238,12 +225,11 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // ── Phase 5: Build final entries ──
-
+    // ── Phase 5: Entries ──
     const entries: HolderEntry[] = [];
     let daysSinceLaunch = 26;
 
-    for (const h of topCandidates) {
+    for (const h of topFinal) {
       const oldestBt = btMap.get(h.owner) ?? null;
       let daysHeld: number;
       if (oldestBt) {
@@ -272,7 +258,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({
       entries,
-      total: verified.size,
+      total: finalHolders.length,
       daysSinceLaunch,
       computedAt: new Date().toISOString(),
     });
